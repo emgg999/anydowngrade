@@ -1,0 +1,13 @@
+{
+  "name": "adb-device-manager",
+  "version": "1.0.0",
+  "description": "ADB Device Manager with Electron",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^40.1.0"
+  }
+}

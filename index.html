@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>AnyDowngrade</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            padding: 20px;
+            margin: 0;
+            position: relative;
+            overflow: hidden;
+            -webkit-user-select: none;
+            /* 禁用文本选择 */
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            cursor: default;
+            /* 鼠标指针为默认箭头 */
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        /* 如果某些元素需要可选（如弹窗中的日志），可单独开启 */
+        .selectable {
+            -webkit-user-select: text !important;
+            user-select: text !important;
+        }
+
+        #deviceList {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        #deviceList th,
+        #deviceList td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        #deviceList tr:hover {
+            background-color: #f9f9f9;
+            cursor: pointer;
+        }
+
+        #deviceList tr.offline td {
+            color: #999;
+        }
+
+        #status {
+            margin-top: 15px;
+            min-height: 24px;
+            font-weight: bold;
+        }
+
+        .success {
+            color: green;
+        }
+
+        .error {
+            color: red;
+        }
+
+        .info {
+            color: #1890ff;
+        }
+
+        button {
+            padding: 8px 16px;
+            background: #1890ff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover:not(:disabled) {
+            background: #0c66c2;
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        /* Loading 遮罩 */
+        #loadingOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            display: none;
+        }
+
+        #appListTable {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        /* 美化 appList 的滚动条（Chrome/Electron） */
+        #appListScrollArea::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #appListScrollArea::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        #appListScrollArea::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+
+        #appListScrollArea::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #1890ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Toast 提示容器 -->
+    <div id="toastContainer"
+        style="position: fixed;top: 5px;left: 10%;width: 80%;height: 100%;display: flex;justify-content: center;align-items: center;pointer-events: none;z-index: 10000;opacity: 0;transition: opacity 0.3s ease;">
+        <div id="toastMessage"
+            style="padding: 16px 28px;background: rgba(0, 0, 0, 0.5);color: white;border-radius: 8px;font-size: 16px;max-width: 80%;text-align: center;pointer-events: auto;box-shadow: 0 4px 20px rgba(0,0,0,0.4);">
+        </div>
+    </div>
+    <div class="header">
+        <h2>📱 AnyDowngrade 应用降级工具</h2>
+        <button id="refreshBtn">🔄 刷新列表</button>
+    </div>
+    <div style="margin: 15px 0; text-align: center;">
+    <button id="installApkBtn" disabled>📁 安装 APK</button>
+    <button id="BtinstallApkn" disabled>📁 推送文件</button>
+    </div>
+    <table id="deviceList">
+        <thead>
+            <tr>
+                <th>设备 ID</th>
+                <th>状态</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <!-- 全局加载遮罩 -->
+    <div id="loadingOverlay">
+        <div class="spinner"></div>
+    </div>
+    <!-- 应用列表容器 -->
+    <div id="appListContainer" style="margin-top: 30px; display: none;">
+        <h3>📦 （<span id="selectedDeviceId"></span>）已安装应用列表</h3>
+        <!-- 表格整体容器 -->
+        <div id="tableWrapper"
+            style="width: 100%;border: 1px solid #eee;border-radius: 6px;overflow: hidden;margin-top: 10px;">
+            <!-- 固定表头 -->
+            <table id="appListHeader" style="width: 100%;border-collapse: collapse;background: #f8f9fa;">
+                <thead>
+                    <tr>
+                        <th style="padding:10px; text-align:left; width:70%;">包名</th>
+                        <th style="padding:10px; text-align:left; width:30%;">操作</th>
+                    </tr>
+                </thead>
+            </table>
+
+            <!-- 可滚动的表体区域 -->
+            <div id="tableBodyScroll" style="max-height: 360px;overflow-y: auto;overflow-x: hidden;">
+                <table id="appListBody" style="width: 100%;border-collapse: collapse;">
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 通用模态框 -->
+    <div id="modal"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:2000; justify-content:center; align-items:center;">
+        <div
+            style="background:white; padding:20px; border-radius:8px; max-width:80%; max-height:80vh; overflow:hidden;">
+            <h3 id="modalTitle"></h3>
+            <pre id="modalContent" style="white-space:pre-wrap; font-size:14px;"></pre>
+            <div id="modalButtons" style="margin-top:15px; text-align:right;">
+                <button id="modalCloseBtn">关闭</button>
+            </div>
+        </div>
+    </div>
+    <script src="renderer.js"></script>
+</body>
+
+</html>
